@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harbour Run — Golden Hour Flight</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a2233;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: #f5f2e8; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .panel { position: fixed; background: rgba(12, 18, 32, 0.72); border: 1px solid rgba(255, 190, 110, 0.35);
+    border-radius: 10px; padding: 10px 14px; backdrop-filter: blur(3px); z-index: 5; }
+  .label { font-size: 10px; letter-spacing: 0.14em; color: #ffb86b; text-transform: uppercase; }
+  .value { font-size: 26px; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .unit { font-size: 12px; color: #c8c2b2; font-weight: 400; }
+  #hud-instruments { top: 14px; left: 14px; display: flex; gap: 18px; align-items: center; }
+  #hud-instruments .group { text-align: left; }
+  #hud-compass { font-size: 12px; color: #e8ddc2; letter-spacing: 0.1em; margin-top: 2px; }
+  #hud-horizon { width: 64px; height: 64px; border-radius: 50%; border: 2px solid #ffb86b;
+    overflow: hidden; position: relative; flex: none; background: #2e4a7a; }
+  #hud-horizon-ball { position: absolute; inset: -40px; border-radius: 50%;
+    background: linear-gradient(#3f7fd0 0 50%, #7a5230 50% 100%); }
+  #hud-horizon::after { content: "✈"; position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 20px; color: #fff; text-shadow: 0 0 4px #000; }
+  #hud-flight { top: 14px; right: 14px; text-align: right; min-width: 190px; }
+  #hud-flight .row { display: flex; justify-content: space-between; gap: 14px; align-items: baseline; }
+  .bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.18); overflow: hidden; margin: 3px 0 8px; }
+  .bar > div { height: 100%; background: linear-gradient(90deg, #ffb347, #ff7a3d); width: 0%; }
+  #hud-fuel-bar.low { background: linear-gradient(90deg, #ff4444, #ff8844); }
+  #hud-mission { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%); font-size: 17px; font-weight: 600;
+    background: rgba(12, 18, 32, 0.72); border: 1px solid rgba(255,190,110,0.35); border-radius: 20px;
+    padding: 8px 20px; z-index: 5; white-space: nowrap; }
+  #hud-flash { position: fixed; bottom: 112px; left: 50%; transform: translateX(-50%); font-size: 20px; font-weight: 700;
+    color: #ffd27a; text-shadow: 0 2px 6px #000; z-index: 6; opacity: 0; transition: opacity 0.25s; white-space: nowrap; }
+  #hud-flash.show { opacity: 1; }
+  #hud-keys { position: fixed; bottom: 14px; left: 14px; font-size: 12px; color: #d8d2c2; line-height: 1.5; }
+  #hud-keys b { color: #ffb86b; }
+  .warn { position: fixed; left: 50%; transform: translateX(-50%); top: 96px; z-index: 7; font-size: 20px;
+    font-weight: 800; letter-spacing: 0.1em; color: #ff5544; text-shadow: 0 0 8px #000;
+    opacity: 0; transition: opacity 0.2s; }
+  .warn.show { opacity: 1; animation: blink 0.7s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0.35; } }
+  #hud-stall { top: 96px; }
+  #hud-fuel-warn { top: 128px; color: #ffb347; }
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    background: rgba(8, 12, 24, 0.55); z-index: 10; }
+  .screen.show { display: flex; }
+  .card { background: rgba(14, 22, 40, 0.92); border: 1px solid rgba(255, 190, 110, 0.5); border-radius: 16px;
+    padding: 28px 36px; max-width: 560px; text-align: center; box-shadow: 0 12px 48px rgba(0,0,0,0.6); }
+  .card h1 { margin: 0 0 4px; font-size: 44px; letter-spacing: 0.06em; color: #ffd27a; }
+  .card h2 { margin: 0 0 10px; font-size: 30px; color: #ffd27a; }
+  .card p { margin: 8px 0; font-size: 15px; line-height: 1.5; color: #e8e2d2; }
+  .card .sub { color: #ffb86b; letter-spacing: 0.18em; font-size: 12px; text-transform: uppercase; }
+  .controls { text-align: left; margin: 14px auto 6px; display: inline-block; font-size: 14px; line-height: 1.9; }
+  .controls b { color: #ffd27a; display: inline-block; min-width: 118px; }
+  .big { font-size: 40px; font-weight: 800; color: #ffd27a; margin: 6px 0; }
+  .stats { display: flex; gap: 26px; justify-content: center; margin: 12px 0; }
+  .stats .label { display: block; }
+  .stats .value { font-size: 22px; }
+  button { margin-top: 14px; font-size: 18px; font-weight: 700; padding: 12px 34px; border-radius: 10px;
+    border: none; cursor: pointer; color: #1a2233; background: linear-gradient(180deg, #ffd27a, #ff9a4d); }
+  button:hover { filter: brightness(1.08); }
+  button.ghost { background: transparent; color: #ffd27a; border: 1px solid #ffb86b; font-size: 15px; padding: 9px 22px; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="scene" aria-label="Harbour Run: fly a small aeroplane over a golden-hour coastal city"></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+
+<div id="hud-instruments" class="panel">
+  <div id="hud-horizon"><div id="hud-horizon-ball"></div></div>
+  <div class="group">
+    <div class="label">Altitude</div>
+    <div class="value"><span id="hud-alt">0 ft</span></div>
+    <div class="label" style="margin-top:6px">Airspeed</div>
+    <div class="value"><span id="hud-speed">0 kt</span></div>
+  </div>
+  <div class="group">
+    <div class="label">Heading</div>
+    <div class="value"><span id="hud-heading">090° E</span></div>
+    <div id="hud-compass">— 045 · 090 · 135 —</div>
+    <div class="label" style="margin-top:6px">Throttle</div>
+    <div class="value"><span id="hud-throttle">0%</span></div>
+  </div>
+</div>
+
+<div id="hud-flight" class="panel">
+  <div class="row"><span class="label">Score</span><span class="value" id="hud-score">0</span></div>
+  <div class="row"><span class="label">Best</span><span class="value" id="hud-best" style="font-size:18px">0</span></div>
+  <div class="row"><span class="label">Time</span><span class="value" id="hud-timer" style="font-size:18px">00:00</span></div>
+  <div class="label" style="margin-top:6px">Fuel <span id="hud-fuel">100%</span></div>
+  <div class="bar"><div id="hud-fuel-bar" style="width:100%"></div></div>
+  <div class="label">Throttle</div>
+  <div class="bar"><div id="hud-throttle-bar" style="width:0%"></div></div>
+</div>
+
+<div id="hud-mission">Fly the rings, then land on runway 09</div>
+<div id="hud-flash"></div>
+<div id="hud-stall" class="warn">⚠ STALL — NOSE DOWN, FULL THROTTLE</div>
+<div id="hud-fuel-warn" class="warn">⚠ LOW FUEL — FIND THE GREEN RING</div>
+<div id="hud-keys"><b>W/S</b> pitch &nbsp; <b>A/D</b> bank &nbsp; <b>R/F</b> throttle &nbsp; <b>Space</b> flaps &nbsp; <b>Drag</b> look around &nbsp; <b>R</b> restart</div>
+
+<div id="screen-start" class="screen">
+  <div class="card">
+    <div class="sub">Golden hour · Harbour City</div>
+    <h1>HARBOUR RUN</h1>
+    <p>One sortie, three jobs: thread six glowing rings over the harbour and the skyline,
+       bring her home onto runway 09, and mind the fuel — the green ring tops the tank up.</p>
+    <div class="controls">
+      <div><b>W / S or ↑ / ↓</b> pitch up / down</div>
+      <div><b>A / D or ← / →</b> bank and turn</div>
+      <div><b>R / F or Shift / Ctrl</b> throttle up / down</div>
+      <div><b>Space (hold)</b> flaps — slow down to land</div>
+      <div><b>Mouse drag</b> look around the cockpit</div>
+    </div>
+    <p>Best score: <b id="best-start">0</b></p>
+    <button id="btn-start">Take off</button>
+  </div>
+</div>
+
+<div id="screen-crash" class="screen">
+  <div class="card">
+    <h2>Down in the harbour</h2>
+    <p id="crash-reason">Crashed</p>
+    <div class="stats">
+      <div><span class="label">Score</span><span class="value" id="crash-score">0</span></div>
+      <div><span class="label">Rings</span><span class="value" id="crash-rings">0/6</span></div>
+      <div><span class="label">Time</span><span class="value" id="crash-time">00:00</span></div>
+      <div><span class="label">Best</span><span class="value" id="crash-best">0</span></div>
+    </div>
+    <button id="btn-restart-crash">Fly again</button>
+  </div>
+</div>
+
+<div id="screen-done" class="screen">
+  <div class="card">
+    <h2>Sortie complete</h2>
+    <p id="done-reason">Smooth landing</p>
+    <div class="big"><span id="done-score">0</span> pts</div>
+    <div class="stats">
+      <div><span class="label">Rings</span><span class="value" id="done-rings">0/6</span></div>
+      <div><span class="label">Time</span><span class="value" id="done-time">00:00</span></div>
+      <div><span class="label">Best</span><span class="value" id="done-best">0</span></div>
+    </div>
+    <button id="btn-restart-done">Fly again</button>
+    <button id="btn-menu-done" class="ghost">Menu</button>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
